@@ -7,6 +7,12 @@ import (
 	nomadApi "github.com/hashicorp/nomad/api"
 )
 
+const (
+	UpdateableTaskVarMetaLabel = "autoupdate_imgtag_var"
+	UpdateableJobsFilterExpr   = "any TaskGroups as tg { any tg.Tasks as t" +
+		" { " + UpdateableTaskVarMetaLabel + " in t.Meta } }"
+)
+
 type Updater struct {
 	nomad *nomadApi.Client
 }
@@ -18,7 +24,7 @@ func NewUpdater(nomad *nomadApi.Client) *Updater {
 }
 
 func (u *Updater) GetUpdateableJobs() ([]string, error) {
-	jobs, _, err := u.nomad.Jobs().List(&nomadApi.QueryOptions{})
+	jobs, _, err := u.nomad.Jobs().List(&nomadApi.QueryOptions{Filter: UpdateableJobsFilterExpr})
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to list nomad jobs: %w", err)
 	}

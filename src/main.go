@@ -1,9 +1,11 @@
 package main
 
 import (
+	"fmt"
 	"log/slog"
-	"nomad-podman-autoupdate/internal/updater"
 	"os"
+
+	"nomad-podman-autoupdate/internal/updater"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 )
@@ -32,7 +34,14 @@ func jobs() bool {
 			slog.Error("failed to get nomad job spec", slog.String("id", jobId), slog.Any("err", err))
 			return false
 		}
-		slog.Info("got job spec", slog.String("id", jobId), slog.Any("source", jobSpec))
+		slog.Info("got job spec",
+			slog.String("id", jobId),
+			slog.String("format", jobSpec.Format),
+			slog.String("source", jobSpec.Source),
+			slog.Any("variable_flags", jobSpec.VariableFlags),
+			slog.String("variables", jobSpec.Variables),
+		)
+		fmt.Println(jobSpec.Source)
 	}
 
 	return true
