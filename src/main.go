@@ -29,19 +29,19 @@ func jobs() bool {
 	slog.Debug("found updatable jobs", slog.Any("ids", jobs))
 
 	for _, jobId := range jobs {
-		jobSpec, err := upd.GetJobSpec(jobId)
+		jobSrc, err := upd.GetJobSource(jobId, nil)
 		if err != nil {
-			slog.Error("failed to get nomad job spec", slog.String("id", jobId), slog.Any("err", err))
+			slog.Error("failed to get nomad job source definition", slog.String("id", jobId), slog.Any("err", err))
 			return false
 		}
-		slog.Info("got job spec",
+		slog.Info("got job source definition",
 			slog.String("id", jobId),
-			slog.String("format", jobSpec.Format),
-			slog.String("source", jobSpec.Source),
-			slog.Any("variable_flags", jobSpec.VariableFlags),
-			slog.String("variables", jobSpec.Variables),
+			slog.String("format", jobSrc.Format),
+			// slog.String("source", jobSrc.Source),
+			slog.Any("variable_flags", jobSrc.VariableFlags),
+			slog.String("variables", jobSrc.Variables),
 		)
-		fmt.Println(jobSpec.Source)
+		fmt.Println(jobSrc.Source)
 	}
 
 	return true
