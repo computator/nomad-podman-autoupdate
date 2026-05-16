@@ -1,21 +1,17 @@
 package nomadutil
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
+
+	"nomad-podman-autoupdate/internal/common"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 )
 
-const (
-	UpdateableTaskMetaTarget = "autoupdate_imgtag_target"
-	UpdateableTaskMetaSource = "autoupdate_imgtag_source"
-	UpdateableJobsFilterExpr = "any TaskGroups as tg { any tg.Tasks as t" +
-		" { " + UpdateableTaskMetaTarget + " in t.Meta } }"
-)
-
 func GetUpdateableJobs(nclient *nomadApi.Client) ([]string, error) {
-	jobs, _, err := nclient.Jobs().List(&nomadApi.QueryOptions{Filter: UpdateableJobsFilterExpr})
+	jobs, _, err := nclient.Jobs().List(&nomadApi.QueryOptions{Filter: common.UpdateableJobsFilterExpr})
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to list nomad jobs: %w", err)
 	}
@@ -32,7 +28,7 @@ func GetUpdateableJobs(nclient *nomadApi.Client) ([]string, error) {
 func GetJobInfo(nclient *nomadApi.Client, jobId string) (*nomadApi.Job, error) {
 	job, _, err := nclient.Jobs().Info(jobId, &nomadApi.QueryOptions{})
 	if err != nil {
-		return &nomadApi.Job{}, fmt.Errorf("failed to get info for nomad job '%s': %w", jobId, err)
+		return nil, fmt.Errorf("failed to get info for nomad job '%s': %w", jobId, err)
 	}
 	slog.Debug("got job info", slog.String("id", jobId), slog.Any("job", job))
 
@@ -44,7 +40,7 @@ func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nom
 		slog.Debug("no job source version specified, loading from job info")
 		job, err := GetJobInfo(nclient, jobId)
 		if err != nil {
-			return &nomadApi.JobSubmission{}, err
+			return nil, err
 		}
 		jobVersion = new(int)
 		*jobVersion = int(*job.Version)
@@ -53,9 +49,18 @@ func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nom
 	slog.Debug("loading job source", slog.Int("version", *jobVersion))
 	jobSrc, _, err := nclient.Jobs().Submission(jobId, *jobVersion, &nomadApi.QueryOptions{})
 	if err != nil {
-		return &nomadApi.JobSubmission{}, fmt.Errorf("failed to get source for nomad job '%s': %w", jobId, err)
+		respErr := nomadApi.UnexpectedResponseError{}
+		if errors.As(err, &respErr) && respErr.StatusCode() == 404 {
+			jobSrc = nil
+		} else {
+			return nil, fmt.Errorf("failed to get source for nomad job '%s': %w", jobId, err)
+		}
 	}
-	slog.Debug("got job source", slog.String("id", jobId), slog.Any("source", jobSrc))
+	if jobSrc == nil {
+		slog.Debug("no job source found", slog.String("id", jobId), slog.Int("version", *jobVersion))
+	} else {
+		slog.Debug("got job source", slog.String("id", jobId), slog.Any("source", jobSrc))
+	}
 
 	return jobSrc, nil
 }
