@@ -5,23 +5,20 @@ import (
 	"log/slog"
 	"os"
 
-	"nomad-podman-autoupdate/internal/updater"
+	"nomad-podman-autoupdate/internal/nomadutil"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 )
 
 func jobs() bool {
-	var upd *updater.Updater
-
-	if client, err := nomadApi.NewClient(nomadApi.DefaultConfig()); err != nil {
+	nclient, err := nomadApi.NewClient(nomadApi.DefaultConfig())
+	if err != nil {
 		slog.Error("failed to create nomad client", slog.Any("err", err))
 		return false
-	} else {
-		slog.Debug("created nomad client", slog.Any("client", client))
-		upd = updater.NewUpdater(client)
 	}
+	slog.Debug("created nomad client", slog.Any("client", nclient))
 
-	jobs, err := upd.GetUpdateableJobs()
+	jobs, err := nomadutil.GetUpdateableJobs(nclient)
 	if err != nil {
 		slog.Error("failed to get updateable jobs", slog.Any("err", err))
 		return false
@@ -29,7 +26,7 @@ func jobs() bool {
 	slog.Debug("found updatable jobs", slog.Any("ids", jobs))
 
 	for _, jobId := range jobs {
-		jobSrc, err := upd.GetJobSource(jobId, nil)
+		jobSrc, err := nomadutil.GetJobSource(nclient, jobId, nil)
 		if err != nil {
 			slog.Error("failed to get nomad job source definition", slog.String("id", jobId), slog.Any("err", err))
 			return false

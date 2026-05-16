@@ -1,4 +1,4 @@
-package updater
+package nomadutil
 
 import (
 	"fmt"
@@ -14,18 +14,8 @@ const (
 		" { " + UpdateableTaskMetaTarget + " in t.Meta } }"
 )
 
-type Updater struct {
-	nomad *nomadApi.Client
-}
-
-func NewUpdater(nomad *nomadApi.Client) *Updater {
-	return &Updater{
-		nomad: nomad,
-	}
-}
-
-func (u *Updater) GetUpdateableJobs() ([]string, error) {
-	jobs, _, err := u.nomad.Jobs().List(&nomadApi.QueryOptions{Filter: UpdateableJobsFilterExpr})
+func GetUpdateableJobs(nclient *nomadApi.Client) ([]string, error) {
+	jobs, _, err := nclient.Jobs().List(&nomadApi.QueryOptions{Filter: UpdateableJobsFilterExpr})
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to list nomad jobs: %w", err)
 	}
@@ -39,8 +29,8 @@ func (u *Updater) GetUpdateableJobs() ([]string, error) {
 	return jobIds, nil
 }
 
-func (u *Updater) GetJobInfo(jobId string) (*nomadApi.Job, error) {
-	job, _, err := u.nomad.Jobs().Info(jobId, &nomadApi.QueryOptions{})
+func GetJobInfo(nclient *nomadApi.Client, jobId string) (*nomadApi.Job, error) {
+	job, _, err := nclient.Jobs().Info(jobId, &nomadApi.QueryOptions{})
 	if err != nil {
 		return &nomadApi.Job{}, fmt.Errorf("failed to get info for nomad job '%s': %w", jobId, err)
 	}
@@ -49,10 +39,10 @@ func (u *Updater) GetJobInfo(jobId string) (*nomadApi.Job, error) {
 	return job, nil
 }
 
-func (u *Updater) GetJobSource(jobId string, jobVersion *int) (*nomadApi.JobSubmission, error) {
+func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nomadApi.JobSubmission, error) {
 	if jobVersion == nil {
 		slog.Debug("no job source version specified, loading from job info")
-		job, err := u.GetJobInfo(jobId)
+		job, err := GetJobInfo(nclient, jobId)
 		if err != nil {
 			return &nomadApi.JobSubmission{}, err
 		}
@@ -61,7 +51,7 @@ func (u *Updater) GetJobSource(jobId string, jobVersion *int) (*nomadApi.JobSubm
 	}
 
 	slog.Debug("loading job source", slog.Int("version", *jobVersion))
-	jobSrc, _, err := u.nomad.Jobs().Submission(jobId, *jobVersion, &nomadApi.QueryOptions{})
+	jobSrc, _, err := nclient.Jobs().Submission(jobId, *jobVersion, &nomadApi.QueryOptions{})
 	if err != nil {
 		return &nomadApi.JobSubmission{}, fmt.Errorf("failed to get source for nomad job '%s': %w", jobId, err)
 	}
