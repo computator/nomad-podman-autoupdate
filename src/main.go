@@ -1,6 +1,7 @@
 package main
 
 import (
+	"errors"
 	"log/slog"
 	"os"
 
@@ -29,8 +30,12 @@ func jobs() bool {
 
 	for _, jobId := range jobs {
 		if err := updater.TryUpdateJob(jobId); err != nil {
-			slog.Error("failed to update job", slog.String("id", jobId), slog.Any("err", err))
-			return false
+			if errors.Is(err, nomadutil.ErrModifyIndexConflict) {
+				slog.Warn("task updates found but not applied because the job has been modified elsewhere", slog.String("id", jobId))
+			} else {
+				slog.Error("failed to update job", slog.String("id", jobId), slog.Any("err", err))
+				return false
+			}
 		}
 	}
 

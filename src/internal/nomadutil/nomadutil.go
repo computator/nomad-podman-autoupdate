@@ -4,11 +4,14 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"nomad-podman-autoupdate/internal/common"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 )
+
+var ErrModifyIndexConflict = errors.New("job modify index specified does not match")
 
 func GetUpdateableJobs(nclient *nomadApi.Client) ([]string, error) {
 	jobs, _, err := nclient.Jobs().List(&nomadApi.QueryOptions{Filter: common.UpdateableJobsFilterExpr})
@@ -63,4 +66,29 @@ func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nom
 	}
 
 	return jobSrc, nil
+}
+
+func UpsertJob(nclient *nomadApi.Client, job *nomadApi.Job, modifyIndex *int) (int, error) {
+	var (
+		err  error
+		resp *nomadApi.JobRegisterResponse
+	)
+	if modifyIndex != nil {
+		if *modifyIndex != 0 && *modifyIndex != int(*job.JobModifyIndex) {
+			return 0, fmt.Errorf("specified modifyIndex %d does not match provided job's JobModifyIndex", *modifyIndex)
+		}
+		resp, _, err = nclient.Jobs().EnforceRegister(job, uint64(*modifyIndex), &nomadApi.WriteOptions{})
+	} else {
+		resp, _, err = nclient.Jobs().Register(job, &nomadApi.WriteOptions{})
+	}
+	if err != nil {
+		if strings.Contains(err.Error(), nomadApi.RegisterEnforceIndexErrPrefix) {
+			return 0, fmt.Errorf("failed to update nomad job '%s': %w: %w", *job.ID, ErrModifyIndexConflict, err)
+		} else {
+			return 0, fmt.Errorf("failed to update or create nomad job '%s': %w", *job.ID, err)
+		}
+	}
+	slog.Debug("created or updated job", slog.String("id", *job.ID), slog.Int("job_index", int(resp.JobModifyIndex)), slog.Any("job", job))
+
+	return int(resp.JobModifyIndex), nil
 }

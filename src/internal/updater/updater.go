@@ -1,6 +1,7 @@
 package updater
 
 import (
+	"errors"
 	"fmt"
 	"log/slog"
 
@@ -60,7 +61,7 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 		}
 	}
 	if !taskFound {
-		return fmt.Errorf("no updatable tasks found for job '%s'", jobId)
+		return fmt.Errorf("no updatable tasks found in job '%s'", jobId)
 	}
 
 	if !taskUpdated {
@@ -68,12 +69,16 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 		return nil
 	}
 
-	jobVer := int(*job.Version)
-	jobSrc, err := nomadutil.GetJobSource(u.NomadClient, jobId, &jobVer)
-
-	if jobSrc == nil {
-		slog.Info("no source found for current job version", slog.String("job", jobId), slog.Int("version", jobVer))
+	oldIndex := new(int(*job.JobModifyIndex))
+	newIndex, err := nomadutil.UpsertJob(u.NomadClient, job, oldIndex)
+	if err != nil {
+		if errors.Is(err, nomadutil.ErrModifyIndexConflict) {
+			return fmt.Errorf("job modified elsewhere during update process '%s': %w", jobId, err)
+		} else {
+			return fmt.Errorf("failed to submit modified job with updated tasks '%s': %w", jobId, err)
+		}
 	}
+	slog.Info("submitted modified job with updated tasks", slog.String("job", jobId), slog.Int("job_index", newIndex))
 
 	return nil
 }
