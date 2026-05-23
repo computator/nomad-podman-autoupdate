@@ -1,6 +1,6 @@
 module nomad-podman-autoupdate
 
-go 1.25.5
+go 1.26.0
 
 require github.com/hashicorp/nomad/api v0.0.0-20260508212055-068227ba803f
 
