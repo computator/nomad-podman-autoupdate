@@ -15,11 +15,11 @@ job "example" {
       driver = "podman"
 
       meta {
-        autoupdate_imgtag_target = "1"
+        autoupdate_imgtag_target = ":1"
       }
 
       config {
-        image   = "busybox:${NOMAD_META_autoupdate_imgtag_target}"
+        image   = "busybox${NOMAD_META_autoupdate_imgtag_target}"
         command = "httpd"
         args    = ["-v", "-f", "-p", "${NOMAD_PORT_www}", "-h", "/local"]
         ports   = ["www"]

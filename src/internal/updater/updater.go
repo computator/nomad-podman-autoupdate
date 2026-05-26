@@ -1,18 +1,22 @@
 package updater
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 
 	"nomad-podman-autoupdate/internal/common"
 	"nomad-podman-autoupdate/internal/nomadutil"
+	"nomad-podman-autoupdate/internal/podmanutil"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 )
 
 type Updater struct {
 	NomadClient *nomadApi.Client
+	PodmanConn  context.Context
 }
 
 func (u *Updater) TryUpdateJob(jobId string) error {
@@ -30,7 +34,13 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 			if oldTarget, ok := t.Meta[common.UpdateableTaskMetaTarget]; ok {
 				taskFound = true
 
-				success, err := u.tryUpdateTask(job, t)
+				taskLogger := slog.With(
+					slog.String("job", jobId),
+					slog.String("group", *g.Name),
+					slog.String("task", t.Name),
+				)
+
+				success, err := u.tryUpdateTask(taskLogger, job, t)
 				if err != nil {
 					return fmt.Errorf("failed to update task '%s' in group '%s' for job '%s': %w", t.Name, *g.Name, jobId, err)
 				}
@@ -40,22 +50,15 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 
 					newTarget, ok := t.Meta[common.UpdateableTaskMetaTarget]
 					if !ok {
-						return fmt.Errorf("expected meta property '%s' has been unset", common.UpdateableTaskMetaTarget)
+						return errors.New("expected meta property '" + common.UpdateableTaskMetaTarget + "' has been unset")
 					}
 
-					slog.Info("task update found",
-						slog.String("job", jobId),
-						slog.String("group", *g.Name),
-						slog.String("task", t.Name),
+					taskLogger.Info("task update found",
 						slog.String("old_target", oldTarget),
 						slog.String("new_target", newTarget),
 					)
 				} else {
-					slog.Debug("no update found for task",
-						slog.String("job", jobId),
-						slog.String("group", *g.Name),
-						slog.String("task", t.Name),
-					)
+					taskLogger.Debug("no update found for task")
 				}
 			}
 		}
@@ -83,6 +86,74 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 	return nil
 }
 
-func (u *Updater) tryUpdateTask(job *nomadApi.Job, task *nomadApi.Task) (bool, error) {
-	return false, nil
+func (u *Updater) tryUpdateTask(taskLogger *slog.Logger, job *nomadApi.Job, task *nomadApi.Task) (bool, error) {
+	var (
+		taskImage     string
+		taskImageRoot string
+		imageRef      strings.Builder
+	)
+	if v, ok := task.Config["image"]; !ok {
+		return false, errors.New("invalid task: task 'image' config property is not set")
+	} else {
+		if taskImage, ok = v.(string); !ok {
+			return false, errors.New("invalid task: task 'image' config property is not a string")
+		}
+	}
+
+	if pos := strings.IndexAny(taskImage, "$:@"); pos > 0 {
+		taskImageRoot = taskImage[0:pos]
+	} else {
+		taskImageRoot = taskImage
+	}
+
+	origSrc, sourceIsSet := task.Meta[common.UpdateableTaskMetaSource]
+	origTgt, ok := task.Meta[common.UpdateableTaskMetaTarget]
+	if !ok {
+		return false, errors.New("expected task meta property '" + common.UpdateableTaskMetaTarget + "' is not set")
+	}
+
+	if !sourceIsSet && len(origTgt) > 0 && origTgt[0] == '@' {
+		return false, fmt.Errorf("task reference '%s' specified in '"+common.UpdateableTaskMetaTarget+"' is not an updatable tag format", origTgt)
+	}
+
+	var pullTag string
+	if sourceIsSet {
+		pullTag = origSrc
+	} else {
+		pullTag = origTgt
+	}
+
+	imageRef.WriteString(taskImageRoot)
+	if len(pullTag) > 0 {
+		if pullTag[0] != ':' && pullTag[0] != '@' {
+			imageRef.WriteByte(':')
+		}
+		imageRef.WriteString(pullTag)
+	}
+
+	_, err := podmanutil.PullImage(u.PodmanConn, imageRef.String())
+	if err != nil {
+		return false, fmt.Errorf("failed to pull image: %w", err)
+	}
+	imgInfo, err := podmanutil.ImageInfo(u.PodmanConn, imageRef.String())
+	if err != nil {
+		return false, fmt.Errorf("failed to inspect image: %w", err)
+	}
+
+	newTgt := "@" + imgInfo.Digest.String()
+
+	if newTgt == origTgt {
+		taskLogger.Debug("pulled image digest matches task digest in '"+common.UpdateableTaskMetaTarget+"'", slog.String("image", imageRef.String()), slog.String("digest", imgInfo.Digest.String()))
+		return false, nil
+	}
+	taskLogger.Debug("new digest found for task image", slog.String("image", imageRef.String()), slog.String("digest", imgInfo.Digest.String()))
+
+	task.Meta[common.UpdateableTaskMetaTarget] = newTgt
+	taskLogger.Debug("updated meta property '"+common.UpdateableTaskMetaTarget+"' for task", slog.String("old_value", origTgt), slog.String("value", newTgt))
+	if !sourceIsSet {
+		taskLogger.Debug("adding meta property '"+common.UpdateableTaskMetaSource+"' for task", slog.String("value", origTgt))
+		task.Meta[common.UpdateableTaskMetaSource] = origTgt
+	}
+
+	return true, nil
 }

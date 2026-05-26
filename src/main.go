@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"nomad-podman-autoupdate/internal/nomadutil"
+	"nomad-podman-autoupdate/internal/podmanutil"
 	"nomad-podman-autoupdate/internal/updater"
 
 	nomadApi "github.com/hashicorp/nomad/api"
@@ -19,7 +20,14 @@ func jobs() bool {
 	}
 	slog.Debug("created nomad client", slog.Any("client", nclient))
 
-	updater := &updater.Updater{NomadClient: nclient}
+	pconn, err := podmanutil.NewDefaultConnection()
+	if err != nil {
+		slog.Error("failed to create connection to podman", slog.Any("err", err))
+		return false
+	}
+	slog.Debug("created podman connection", slog.Any("connection", pconn))
+
+	updater := &updater.Updater{NomadClient: nclient, PodmanConn: pconn}
 
 	jobs, err := nomadutil.GetUpdateableJobs(nclient)
 	if err != nil {
