@@ -27,7 +27,7 @@ func jobs() bool {
 	}
 	slog.Debug("created podman connection", slog.Any("connection", pconn))
 
-	updater := &updater.Updater{NomadClient: nclient, PodmanConn: pconn}
+	updater := updater.NewUpdater(nclient, pconn)
 
 	jobs, err := nomadutil.GetUpdateableJobs(nclient)
 	if err != nil {

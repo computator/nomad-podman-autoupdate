@@ -5,17 +5,26 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 
 	"nomad-podman-autoupdate/internal/common"
 	"nomad-podman-autoupdate/internal/nomadutil"
-	"nomad-podman-autoupdate/internal/podmanutil"
 )
 
 type Updater struct {
 	NomadClient *nomadApi.Client
 	PodmanConn  context.Context
+	ccache      *CheckCache
+}
+
+func NewUpdater(nomadClient *nomadApi.Client, podmanConn context.Context) *Updater {
+	return &Updater{
+		NomadClient: nomadClient,
+		PodmanConn:  podmanConn,
+		ccache:      NewCheckCache(podmanConn),
+	}
 }
 
 func (u *Updater) TryUpdateJob(jobId string) error {
@@ -25,8 +34,10 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 	}
 
 	var (
-		taskFound   = false
-		taskUpdated = false
+		taskFound    = false
+		taskUpdated  = false
+		updateErrors = false
+		wg           sync.WaitGroup
 	)
 	for _, g := range job.TaskGroups {
 		for _, t := range g.Tasks {
@@ -39,36 +50,49 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 					slog.String("task", t.Name),
 				)
 
-				success, err := (&taskUpdater{
-					Updater: u,
-					logger:  taskLogger,
-					job:     job,
-					task:    t,
-				}).tryUpdateTask()
-				if err != nil {
-					return fmt.Errorf("failed to update task '%s' in group '%s' for job '%s': %w", t.Name, *g.Name, jobId, err)
-				}
-
-				if success {
-					taskUpdated = true
-
-					newTarget, ok := t.Meta[common.UpdateableTaskMetaTarget]
-					if !ok {
-						return errors.New("expected meta property '" + common.UpdateableTaskMetaTarget + "' has been unset")
+				wg.Go(func() {
+					success, err := (&taskUpdater{
+						Updater: u,
+						logger:  taskLogger,
+						job:     job,
+						task:    t,
+					}).tryUpdateTask()
+					if err != nil {
+						taskLogger.Warn("failed to update task", slog.Any("err", err))
+						updateErrors = true
+						return
 					}
 
-					taskLogger.Info("task update found",
-						slog.String("target", newTarget),
-						slog.String("old_target", oldTarget),
-					)
-				} else {
-					taskLogger.Debug("no update found for task")
-				}
+					if success {
+						taskUpdated = true
+
+						newTarget, ok := t.Meta[common.UpdateableTaskMetaTarget]
+						if !ok {
+							// use slog since this indicates a bug and isn't task specific
+							slog.Error("expected meta property '" + common.UpdateableTaskMetaTarget + "' has been unset")
+							updateErrors = true
+							return
+						}
+
+						taskLogger.Info("task update found",
+							slog.String("target", newTarget),
+							slog.String("old_target", oldTarget),
+						)
+					} else {
+						taskLogger.Debug("no update found for task")
+					}
+				})
 			}
 		}
 	}
 	if !taskFound {
 		return fmt.Errorf("no updatable tasks found in job '%s'", jobId)
+	}
+
+	wg.Wait()
+
+	if updateErrors {
+		return fmt.Errorf("one or more errors encountered while updating job '%s'", jobId)
 	}
 
 	if !taskUpdated {
@@ -103,13 +127,9 @@ func (tu *taskUpdater) tryUpdateTask() (bool, error) {
 		return false, fmt.Errorf("failed to get current task image reference: %w", err)
 	}
 
-	_, err = podmanutil.PullImage(tu.PodmanConn, imgPullRef)
+	imgInfo, err := tu.ccache.Check(imgPullRef)
 	if err != nil {
-		return false, fmt.Errorf("failed to pull image: %w", err)
-	}
-	imgInfo, err := podmanutil.ImageInfo(tu.PodmanConn, imgPullRef)
-	if err != nil {
-		return false, fmt.Errorf("failed to inspect image: %w", err)
+		return false, fmt.Errorf("failed to check for new image: %w", err)
 	}
 
 	currDigestTag, err := tu.getRefDigest()
