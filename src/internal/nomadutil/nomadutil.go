@@ -6,9 +6,9 @@ import (
 	"log/slog"
 	"strings"
 
-	"nomad-podman-autoupdate/internal/common"
-
 	nomadApi "github.com/hashicorp/nomad/api"
+
+	"nomad-podman-autoupdate/internal/common"
 )
 
 var ErrModifyIndexConflict = errors.New("job modify index specified does not match")
