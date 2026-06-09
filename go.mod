@@ -4,6 +4,7 @@ go 1.26.0
 
 require (
 	github.com/hashicorp/nomad/api v0.0.0-20260508212055-068227ba803f
+	github.com/jackc/puddle/v2 v2.2.2
 	go.podman.io/podman/v6 v6.0.0-20260525134821-43fc762a4772
 )
 

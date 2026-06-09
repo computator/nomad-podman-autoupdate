@@ -21,14 +21,12 @@ func jobs() bool {
 	}
 	slog.Debug("created nomad client", slog.Any("client", nclient))
 
-	pconn, err := podmanutil.NewDefaultConnection()
+	updater, err := updater.NewUpdater(nclient, podmanutil.NewDefaultConnection)
 	if err != nil {
-		slog.Error("failed to create connection to podman", slog.Any("err", err))
+		slog.Error("error initializing updater", slog.Any("err", err))
 		return false
 	}
-	slog.Debug("created podman connection", slog.Any("connection", pconn))
-
-	updater := updater.NewUpdater(nclient, pconn)
+	defer updater.PodmanConnPool.Close()
 
 	jobs, err := nomadutil.GetUpdateableJobs(nclient)
 	if err != nil {

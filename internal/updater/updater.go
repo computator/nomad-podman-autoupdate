@@ -8,23 +8,48 @@ import (
 	"sync"
 
 	nomadApi "github.com/hashicorp/nomad/api"
+	"github.com/jackc/puddle/v2"
 
 	"nomad-podman-autoupdate/internal/common"
 	"nomad-podman-autoupdate/internal/nomadutil"
 )
 
 type Updater struct {
-	NomadClient *nomadApi.Client
-	PodmanConn  context.Context
-	ccache      *CheckCache
+	NomadClient    *nomadApi.Client
+	PodmanConnPool *puddle.Pool[context.Context]
+	ccache         *CheckCache
 }
 
-func NewUpdater(nomadClient *nomadApi.Client, podmanConn context.Context) *Updater {
-	return &Updater{
-		NomadClient: nomadClient,
-		PodmanConn:  podmanConn,
-		ccache:      NewCheckCache(podmanConn),
+func NewUpdater(nomadClient *nomadApi.Client, podmanConnFactory func() (context.Context, error)) (*Updater, error) {
+	pool, err := puddle.NewPool(&puddle.Config[context.Context]{
+		Constructor: func(ctx context.Context) (context.Context, error) {
+			pconn, err := podmanConnFactory()
+			if err != nil {
+				slog.Error("failed to create connection to podman", slog.Any("err", err))
+				return nil, err
+			}
+			slog.Debug("created podman pool connection", slog.Any("connection", pconn))
+			return pconn, nil
+		},
+		Destructor: func(pconn context.Context) {
+			slog.Debug("removing podman pool connection", slog.Any("connection", pconn))
+		},
+		MaxSize: 5,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("failed to create podman connection pool: %w", err)
 	}
+
+	if err := pool.CreateResource(context.Background()); err != nil {
+		pool.Close()
+		return nil, fmt.Errorf("failed to create initial podman connection: %w", err)
+	}
+
+	return &Updater{
+		NomadClient:    nomadClient,
+		PodmanConnPool: pool,
+		ccache:         NewCheckCache(pool),
+	}, nil
 }
 
 func (u *Updater) TryUpdateJob(jobId string) error {
@@ -32,6 +57,8 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 	if err != nil {
 		return fmt.Errorf("failed to load job '%s': %w", jobId, err)
 	}
+
+	slog.Debug("attempting to update tasks for job", slog.String("job", jobId))
 
 	var (
 		taskFound    = false
@@ -122,6 +149,8 @@ type taskUpdater struct {
 }
 
 func (tu *taskUpdater) tryUpdateTask() (bool, error) {
+	tu.logger.Debug("attempting to update task")
+
 	imgPullRef, err := tu.getImagePullRef()
 	if err != nil {
 		return false, fmt.Errorf("failed to get current task image reference: %w", err)

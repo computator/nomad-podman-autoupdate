@@ -7,25 +7,26 @@ import (
 	"log/slog"
 	"sync"
 
+	"github.com/jackc/puddle/v2"
 	"go.podman.io/podman/v6/pkg/inspect"
 
 	"nomad-podman-autoupdate/internal/podmanutil"
 )
 
 type CheckCache struct {
-	PodmanConn context.Context
-	imageData  map[string]*inspect.ImageData
-	imgIds     map[string]string
-	pullQueue  map[string]<-chan error
-	queueMutex sync.Mutex
+	PodmanConnPool *puddle.Pool[context.Context]
+	imageData      map[string]*inspect.ImageData
+	imgIds         map[string]string
+	pullQueue      map[string]<-chan error
+	queueMutex     sync.Mutex
 }
 
-func NewCheckCache(podmanConn context.Context) *CheckCache {
+func NewCheckCache(podmanConnPool *puddle.Pool[context.Context]) *CheckCache {
 	return &CheckCache{
-		PodmanConn: podmanConn,
-		imageData:  make(map[string]*inspect.ImageData),
-		imgIds:     make(map[string]string),
-		pullQueue:  make(map[string]<-chan error),
+		PodmanConnPool: podmanConnPool,
+		imageData:      make(map[string]*inspect.ImageData),
+		imgIds:         make(map[string]string),
+		pullQueue:      make(map[string]<-chan error),
 	}
 }
 
@@ -33,7 +34,7 @@ func (c *CheckCache) Check(imgRef string) (*inspect.ImageData, error) {
 	checkLogger := slog.With(slog.String("image", imgRef))
 
 	if id, ok := c.imgIds[imgRef]; ok {
-		checkLogger.Debug("returning previously cached image", slog.String("image_id", id))
+		checkLogger.Debug("returning previously cached image tag", slog.String("image_id", id))
 		return c.imageData[id], nil
 	}
 
@@ -44,7 +45,7 @@ func (c *CheckCache) Check(imgRef string) (*inspect.ImageData, error) {
 		c.pullQueue[imgRef] = newChan
 		c.queueMutex.Unlock()
 
-		checkLogger.Info("queuing check for image")
+		checkLogger.Info("initializing image check for queue")
 		go c.fetchImageToCache(newChan, imgRef)
 		queueChan = newChan
 	} else {
@@ -54,6 +55,7 @@ func (c *CheckCache) Check(imgRef string) (*inspect.ImageData, error) {
 	checkLogger.Debug("waiting for queued image check")
 	select {
 	case err := <-queueChan:
+		checkLogger.Debug("got result from queued image check")
 		if err != nil {
 			checkLogger.Warn("queued image check failed with error", slog.Any("err", err))
 			return nil, fmt.Errorf("error checking image in queue: %w", err)
@@ -61,7 +63,7 @@ func (c *CheckCache) Check(imgRef string) (*inspect.ImageData, error) {
 	}
 
 	if id, ok := c.imgIds[imgRef]; ok {
-		checkLogger.Debug("returning newly cached image", slog.String("image_id", id))
+		checkLogger.Debug("returning cached image tag from queued check", slog.String("image_id", id))
 		return c.imageData[id], nil
 	} else {
 		return nil, errors.New("previous queued image check failed")
@@ -71,12 +73,21 @@ func (c *CheckCache) Check(imgRef string) (*inspect.ImageData, error) {
 func (c *CheckCache) fetchImageToCache(queueChan chan<- error, imgRef string) {
 	defer close(queueChan)
 
-	_, err := podmanutil.PullImage(c.PodmanConn, imgRef)
+	connRsrc, err := c.PodmanConnPool.Acquire(context.Background())
+	if err != nil {
+		queueChan <- fmt.Errorf("failed to acquire podman connection: %w", err)
+		return
+	}
+	defer connRsrc.Release()
+
+	slog.Debug("fetching image for cache", slog.String("image", imgRef))
+
+	_, err = podmanutil.PullImage(connRsrc.Value(), imgRef)
 	if err != nil {
 		queueChan <- fmt.Errorf("failed to pull image: %w", err)
 		return
 	}
-	imgInfo, err := podmanutil.ImageInfo(c.PodmanConn, imgRef)
+	imgInfo, err := podmanutil.ImageInfo(connRsrc.Value(), imgRef)
 	if err != nil {
 		queueChan <- fmt.Errorf("failed to inspect image: %w", err)
 		return
