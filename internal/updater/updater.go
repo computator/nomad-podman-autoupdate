@@ -58,7 +58,7 @@ func (u *Updater) TryUpdateJob(jobId string) error {
 		return fmt.Errorf("failed to load job '%s': %w", jobId, err)
 	}
 
-	slog.Debug("attempting to update tasks for job", slog.String("job", jobId))
+	slog.Info("attempting to update tasks for job", slog.String("job", jobId))
 
 	var (
 		taskFound    = false

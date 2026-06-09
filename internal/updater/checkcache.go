@@ -45,7 +45,7 @@ func (c *CheckCache) Check(imgRef string) (*inspect.ImageData, error) {
 		c.pullQueue[imgRef] = newChan
 		c.queueMutex.Unlock()
 
-		checkLogger.Info("initializing image check for queue")
+		checkLogger.Debug("initializing image check for queue")
 		go c.fetchImageToCache(newChan, imgRef)
 		queueChan = newChan
 	} else {
@@ -80,7 +80,7 @@ func (c *CheckCache) fetchImageToCache(queueChan chan<- error, imgRef string) {
 	}
 	defer connRsrc.Release()
 
-	slog.Debug("fetching image for cache", slog.String("image", imgRef))
+	slog.Info("fetching image for tag", slog.String("image", imgRef))
 
 	_, err = podmanutil.PullImage(connRsrc.Value(), imgRef)
 	if err != nil {
