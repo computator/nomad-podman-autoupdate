@@ -13,8 +13,14 @@ import (
 
 var ErrModifyIndexConflict = errors.New("job modify index specified does not match")
 
-func GetUpdateableJobs(nclient *nomadApi.Client) ([]string, error) {
-	jobs, _, err := nclient.Jobs().List(&nomadApi.QueryOptions{Filter: common.UpdateableJobsFilterExpr})
+func GetUpdateableJobs(nclient *nomadApi.Client, includeStopped bool) ([]string, error) {
+	var filt string
+	if includeStopped {
+		filt = common.UpdateableJobsFilterExpr
+	} else {
+		filt = "Stop == false and (" + common.UpdateableJobsFilterExpr + ")"
+	}
+	jobs, _, err := nclient.Jobs().List(&nomadApi.QueryOptions{Filter: filt})
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to list nomad jobs: %w", err)
 	}

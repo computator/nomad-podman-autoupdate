@@ -28,7 +28,7 @@ func jobs() bool {
 	}
 	defer updater.PodmanConnPool.Close()
 
-	jobs, err := nomadutil.GetUpdateableJobs(nclient)
+	jobs, err := nomadutil.GetUpdateableJobs(nclient, false)
 	if err != nil {
 		slog.Error("failed to get updateable jobs", slog.Any("err", err))
 		return false
