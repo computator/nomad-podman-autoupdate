@@ -6,7 +6,7 @@ import (
 	"log/slog"
 	"strings"
 
-	"nomad-podman-autoupdate/internal/common"
+	"github.com/computator/nomad-podman-autoupdate/internal/common"
 )
 
 func (tu *taskUpdater) getRefDigest() (string, error) {

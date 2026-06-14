@@ -10,7 +10,7 @@ import (
 	"go.podman.io/podman/v6/pkg/bindings/images"
 	"go.podman.io/podman/v6/pkg/inspect"
 
-	"nomad-podman-autoupdate/internal/common"
+	"github.com/computator/nomad-podman-autoupdate/internal/common"
 )
 
 const PodmanDefaultURI = "unix:///run/podman/podman.sock"

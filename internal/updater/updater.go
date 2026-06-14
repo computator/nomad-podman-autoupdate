@@ -10,8 +10,8 @@ import (
 	nomadApi "github.com/hashicorp/nomad/api"
 	"github.com/jackc/puddle/v2"
 
-	"nomad-podman-autoupdate/internal/common"
-	"nomad-podman-autoupdate/internal/nomadutil"
+	"github.com/computator/nomad-podman-autoupdate/internal/common"
+	"github.com/computator/nomad-podman-autoupdate/internal/nomadutil"
 )
 
 type Updater struct {

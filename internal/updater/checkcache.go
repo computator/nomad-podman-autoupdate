@@ -10,7 +10,7 @@ import (
 	"github.com/jackc/puddle/v2"
 	"go.podman.io/podman/v6/pkg/inspect"
 
-	"nomad-podman-autoupdate/internal/podmanutil"
+	"github.com/computator/nomad-podman-autoupdate/internal/podmanutil"
 )
 
 type CheckCache struct {

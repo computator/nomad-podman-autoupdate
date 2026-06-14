@@ -7,10 +7,10 @@ import (
 	"os"
 	"sync"
 
-	"nomad-podman-autoupdate/internal/common"
-	"nomad-podman-autoupdate/internal/nomadutil"
-	"nomad-podman-autoupdate/internal/podmanutil"
-	"nomad-podman-autoupdate/internal/updater"
+	"github.com/computator/nomad-podman-autoupdate/internal/common"
+	"github.com/computator/nomad-podman-autoupdate/internal/nomadutil"
+	"github.com/computator/nomad-podman-autoupdate/internal/podmanutil"
+	"github.com/computator/nomad-podman-autoupdate/internal/updater"
 
 	nomadApi "github.com/hashicorp/nomad/api"
 )

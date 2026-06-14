@@ -1,4 +1,4 @@
-module nomad-podman-autoupdate
+module github.com/computator/nomad-podman-autoupdate
 
 go 1.26.0
 
