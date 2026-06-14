@@ -1,5 +1,7 @@
 package common
 
+import "log/slog"
+
 const (
 	// Meta property designating a job task as updatable.
 	//
@@ -18,4 +20,6 @@ const (
 	// Filter expression to filter for jobs with a target meta property defined.
 	UpdateableJobsFilterExpr = "any TaskGroups as tg { any tg.Tasks as t" +
 		" { " + UpdateableTaskMetaTarget + " in t.Meta } }"
+
+	LevelTrace = slog.Level(slog.LevelDebug - 1)
 )

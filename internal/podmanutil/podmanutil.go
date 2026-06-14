@@ -9,6 +9,8 @@ import (
 	"go.podman.io/podman/v6/pkg/bindings"
 	"go.podman.io/podman/v6/pkg/bindings/images"
 	"go.podman.io/podman/v6/pkg/inspect"
+
+	"nomad-podman-autoupdate/internal/common"
 )
 
 const PodmanDefaultURI = "unix:///run/podman/podman.sock"
@@ -22,6 +24,7 @@ func NewDefaultConnection() (context.Context, error) {
 			uri = PodmanDefaultURI
 		}
 	}
+	slog.Log(context.Background(), common.LevelTrace, "creating podman connection", slog.String("uri", uri))
 	conn, err := bindings.NewConnection(context.Background(), uri)
 	return conn, err
 }
@@ -34,7 +37,7 @@ func PullImage(pconn context.Context, ref string) (string, error) {
 	if len(images) != 1 {
 		return "", fmt.Errorf("unexpected number of image ids returned %d != 1", len(images))
 	}
-	slog.Debug("pulled container image", slog.String("ref", ref), slog.Any("id", images[0]))
+	slog.Log(context.Background(), common.LevelTrace, "pulled container image", slog.String("ref", ref), slog.Any("id", images[0]))
 	return images[0], nil
 }
 
@@ -43,6 +46,6 @@ func ImageInfo(pconn context.Context, ref string) (*inspect.ImageData, error) {
 	if err != nil {
 		return nil, fmt.Errorf("error retriving image info '%s': %w", ref, err)
 	}
-	slog.Debug("inspected container image", slog.String("ref", ref), slog.Any("info", info.ImageData))
+	slog.Log(context.Background(), common.LevelTrace, "inspected container image", slog.String("ref", ref), slog.Any("info", info.ImageData))
 	return info.ImageData, nil
 }

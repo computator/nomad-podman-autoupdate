@@ -28,11 +28,11 @@ func NewUpdater(nomadClient *nomadApi.Client, podmanConnFactory func() (context.
 				slog.Error("failed to create connection to podman", slog.Any("err", err))
 				return nil, err
 			}
-			slog.Debug("created podman pool connection", slog.Any("connection", pconn))
+			slog.Log(context.Background(), common.LevelTrace, "created podman pool connection", slog.Any("connection", pconn))
 			return pconn, nil
 		},
 		Destructor: func(pconn context.Context) {
-			slog.Debug("removing podman pool connection", slog.Any("connection", pconn))
+			slog.Log(context.Background(), common.LevelTrace, "removing podman pool connection", slog.Any("connection", pconn))
 		},
 		MaxSize: 5,
 	})

@@ -1,6 +1,7 @@
 package nomadutil
 
 import (
+	"context"
 	"errors"
 	"fmt"
 	"log/slog"
@@ -24,13 +25,13 @@ func GetUpdateableJobs(nclient *nomadApi.Client, includeStopped bool) ([]string,
 	if err != nil {
 		return []string{}, fmt.Errorf("failed to list nomad jobs: %w", err)
 	}
-	slog.Debug("loaded nomad jobs", slog.Int("count", len(jobs)))
+	slog.Log(context.Background(), common.LevelTrace, "loaded nomad jobs", slog.Int("count", len(jobs)))
 	jobIds := make([]string, 0, len(jobs))
 	for _, j := range jobs {
-		slog.Debug("got job listing", slog.Any("job", j))
+		slog.Log(context.Background(), common.LevelTrace, "got job listing", slog.Any("job", j))
 		jobIds = append(jobIds, j.ID)
 	}
-	slog.Debug("job id list", slog.Any("ids", jobIds))
+	slog.Log(context.Background(), common.LevelTrace, "job id list", slog.Any("ids", jobIds))
 	return jobIds, nil
 }
 
@@ -39,14 +40,14 @@ func GetJobInfo(nclient *nomadApi.Client, jobId string) (*nomadApi.Job, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get info for nomad job '%s': %w", jobId, err)
 	}
-	slog.Debug("got job info", slog.String("id", jobId), slog.Any("job", job))
+	slog.Log(context.Background(), common.LevelTrace, "got job info", slog.String("id", jobId), slog.Any("job", job))
 
 	return job, nil
 }
 
 func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nomadApi.JobSubmission, error) {
 	if jobVersion == nil {
-		slog.Debug("no job source version specified, loading from job info")
+		slog.Log(context.Background(), common.LevelTrace, "no job source version specified, loading from job info")
 		job, err := GetJobInfo(nclient, jobId)
 		if err != nil {
 			return nil, err
@@ -55,7 +56,7 @@ func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nom
 		*jobVersion = int(*job.Version)
 	}
 
-	slog.Debug("loading job source", slog.Int("version", *jobVersion))
+	slog.Log(context.Background(), common.LevelTrace, "loading job source", slog.Int("version", *jobVersion))
 	jobSrc, _, err := nclient.Jobs().Submission(jobId, *jobVersion, &nomadApi.QueryOptions{})
 	if err != nil {
 		respErr := nomadApi.UnexpectedResponseError{}
@@ -66,9 +67,9 @@ func GetJobSource(nclient *nomadApi.Client, jobId string, jobVersion *int) (*nom
 		}
 	}
 	if jobSrc == nil {
-		slog.Debug("no job source found", slog.String("id", jobId), slog.Int("version", *jobVersion))
+		slog.Log(context.Background(), common.LevelTrace, "no job source found", slog.String("id", jobId), slog.Int("version", *jobVersion))
 	} else {
-		slog.Debug("got job source", slog.String("id", jobId), slog.Any("source", jobSrc))
+		slog.Log(context.Background(), common.LevelTrace, "got job source", slog.String("id", jobId), slog.Any("source", jobSrc))
 	}
 
 	return jobSrc, nil
@@ -94,7 +95,7 @@ func UpsertJob(nclient *nomadApi.Client, job *nomadApi.Job, modifyIndex *int) (i
 			return 0, fmt.Errorf("failed to update or create nomad job '%s': %w", *job.ID, err)
 		}
 	}
-	slog.Debug("created or updated job", slog.String("id", *job.ID), slog.Int("job_index", int(resp.JobModifyIndex)), slog.Any("job", job))
+	slog.Log(context.Background(), common.LevelTrace, "created or updated job", slog.String("id", *job.ID), slog.Int("job_index", int(resp.JobModifyIndex)), slog.Any("job", job))
 
 	return int(resp.JobModifyIndex), nil
 }

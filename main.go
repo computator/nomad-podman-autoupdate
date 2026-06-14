@@ -1,11 +1,13 @@
 package main
 
 import (
+	"context"
 	"errors"
 	"log/slog"
 	"os"
 	"sync"
 
+	"nomad-podman-autoupdate/internal/common"
 	"nomad-podman-autoupdate/internal/nomadutil"
 	"nomad-podman-autoupdate/internal/podmanutil"
 	"nomad-podman-autoupdate/internal/updater"
@@ -19,7 +21,7 @@ func jobs() bool {
 		slog.Error("failed to create nomad client", slog.Any("err", err))
 		return false
 	}
-	slog.Debug("created nomad client", slog.Any("client", nclient))
+	slog.Log(context.Background(), common.LevelTrace, "created nomad client", slog.Any("client", nclient))
 
 	updater, err := updater.NewUpdater(nclient, podmanutil.NewDefaultConnection)
 	if err != nil {
@@ -33,7 +35,10 @@ func jobs() bool {
 		slog.Error("failed to get updateable jobs", slog.Any("err", err))
 		return false
 	}
-	slog.Debug("found updatable jobs", slog.Any("ids", jobs))
+	slog.Debug("found updatable jobs", slog.Int("count", len(jobs)), slog.Any("ids", jobs))
+	if len(jobs) == 0 {
+		slog.Info("no updatable jobs found")
+	}
 
 	var (
 		updateErrors = false
@@ -63,7 +68,7 @@ func jobs() bool {
 
 func main() {
 	slog.SetDefault(slog.New(
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}),
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: common.LevelTrace}),
 	))
 
 	if ok := jobs(); !ok {
