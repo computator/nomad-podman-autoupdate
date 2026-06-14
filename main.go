@@ -62,7 +62,9 @@ func jobs() bool {
 }
 
 func main() {
-	slog.SetLogLoggerLevel(slog.LevelDebug)
+	slog.SetDefault(slog.New(
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: slog.LevelDebug}),
+	))
 
 	if ok := jobs(); !ok {
 		os.Exit(1)
