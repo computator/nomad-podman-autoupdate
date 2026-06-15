@@ -3,5 +3,5 @@ export GOFLAGS := "-tags=remote,containers_image_openpgp,exclude_graphdriver_btr
 
 build:
 	go build .
-run:
-	go run .
+run *ARGS:
+	go run . {{ARGS}}

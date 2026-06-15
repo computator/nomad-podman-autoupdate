@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"flag"
 	"log/slog"
 	"os"
 	"sync"
@@ -67,8 +68,23 @@ func jobs() bool {
 }
 
 func main() {
+	var logLevel = slog.LevelWarn
+	flag.BoolFunc("v", "increase logging level. This can be specified up to 3 times", func(s string) error {
+		switch logLevel {
+		case slog.LevelWarn:
+			logLevel = slog.LevelInfo
+		case slog.LevelInfo:
+			logLevel = slog.LevelDebug
+		case slog.LevelDebug:
+			logLevel = common.LevelTrace
+		}
+		return nil
+	})
+
+	flag.Parse()
+
 	slog.SetDefault(slog.New(
-		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: common.LevelTrace}),
+		slog.NewTextHandler(os.Stderr, &slog.HandlerOptions{Level: logLevel}),
 	))
 
 	if ok := jobs(); !ok {
