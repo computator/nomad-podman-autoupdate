@@ -2,6 +2,6 @@ export CGO_ENABLED := "0"
 export GOFLAGS := "-tags=remote,containers_image_openpgp,exclude_graphdriver_btrfs"
 
 build:
-	go build .
+	go build -v .
 run *ARGS:
 	go run . {{ARGS}}
